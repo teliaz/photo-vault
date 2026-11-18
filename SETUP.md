@@ -93,10 +93,36 @@ Files on the host (installed 2026-11-18):
 - `/etc/systemd/system/immich-library-backup.timer` — **daily at 02:00**,
   `Persistent=true` (a missed run fires after boot).
 
+### Mount the drive and trigger a backup manually
+
+The nightly timer only succeeds when the drive is mounted. To back up on
+demand (or after the timer failed because the drive was away):
+
 ```sh
-systemctl list-timers immich-library-backup.timer   # next run
-systemctl start immich-library-backup.service       # run now (foreground)
-journalctl -u immich-library-backup.service -f      # watch a run
+# 1. Plug in the drive, then make sure it is at the expected path.
+#    If the desktop automounted it under /run/media/teliaz/...:
+sudo umount /run/media/teliaz/2TB_TOSHIBA
+
+# 2. Mount it where fstab (and the backup script) expects it:
+sudo mount /mnt/2TB_TOSHIBA
+findmnt /mnt/2TB_TOSHIBA          # should list /dev/sdb1, fstype exfat
+
+# 3. Trigger the backup. This blocks until the copy finishes —
+#    nightly deltas are minutes, the first full copy was hours.
+sudo systemctl start immich-library-backup.service
+
+# In another terminal, or afterwards:
+journalctl -u immich-library-backup.service -f   # watch a run live
+
+# 4. When done, eject before unplugging (exFAT has no journal):
+sudo umount /mnt/2TB_TOSHIBA
+```
+
+The service aborts safely (exit 1, message in the journal) when either disk
+is not mounted — a failed run changes nothing on the backup drive.
+
+```sh
+systemctl list-timers immich-library-backup.timer   # next scheduled run
 ```
 
 The mirror is **not** versioned: `--delete` means a photo deleted in Immich
