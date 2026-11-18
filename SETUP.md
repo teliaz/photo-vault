@@ -47,28 +47,41 @@ Backups of `/etc/fstab` from before these lines: `/etc/fstab.bak-immich`,
 
 ## The extra backup location (`/mnt/2TB_TOSHIBA`)
 
+**This drive is detachable by design.** It is not always attached, and nothing
+on the always-on path depends on it:
+
+- The systemd timer fires nightly regardless; when the drive is absent the
+  script exits early with `backup drive not mounted, aborting` and the unit
+  reports failed. That is expected and harmless — the next run with the drive
+  attached mirrors everything that changed in the meantime.
+- `Persistent=true` only re-fires runs missed while the machine was off. A
+  run missed because the drive was unplugged simply re-runs at the next 02:00
+  with the drive present (or immediately via `systemctl start
+  immich-library-backup.service`).
+- The immich-server container does **not** mount anything from this drive.
+  (A bind mount from a detachable disk is dangerous: Docker silently
+  re-creates the missing host path as an empty directory, so backups would
+  "succeed" onto the SSD, and Immich's folder checks can crash-loop the
+  server. Tried and reverted on 2026-11-18.)
+
 Layout on the backup disk:
 
 ```
 /mnt/2TB_TOSHIBA/immich-backup/
-├── database/   # Immich's built-in PostgreSQL dump backups (bind-mounted below)
-└── library/    # rsync mirror of the whole upload library
+└── library/    # rsync mirror of the whole upload library, incl. database dumps
 ```
 
-### Part A — Immich database backups (in-app setting)
+### Immich database backups (in-app setting)
 
-- `immich-app/docker-compose.yml` mounts
-  `/mnt/2TB_TOSHIBA/immich-backup/database` into the server container at
-  **`/backup`**.
-- **Pending manual step (needs the web UI):** in Immich, *Administration →
-  Settings → Backup*, set the database backup path to `/backup`, enable
-  scheduled backup (e.g. daily), and keep a reasonable retention (e.g. last 14).
-  The path lives in Immich's own DB, so it survives container recreation.
-- The folder already contains a `.immich` marker file in case Immich's
-  folder-integrity check ever extends to custom backup paths (learned the hard
-  way with the 4T disk — a missing marker crash-loops the server).
+Immich writes PostgreSQL dumps to its default location `/data/backups` —
+i.e. `/mnt/4T_RED/immich/library/backups`, inside the always-attached
+library tree. The nightly mirror therefore carries them to the backup disk
+automatically whenever it is attached; no separate wiring.
 
-### Part B — nightly library mirror (systemd)
+**Pending manual step (needs the web UI):** in Immich, *Administration →
+Settings → Backup*, enable scheduled database backup (e.g. daily) and leave
+the path at its default (`/data/backups`). Do **not** point it at a custom
+path on the removable drive.
 
 Files on the host (installed 2026-11-18):
 
@@ -97,9 +110,10 @@ original README plan — it can target the same disk.
 
 1. `docker compose down` in `immich-app/`.
 2. Restore the library tree: rsync/copy `immich-backup/library/` back to
-   `/mnt/4T_RED/immich/library/`.
+   `/mnt/4T_RED/immich/library/` (database dumps are in
+   `immich-backup/library/backups/`).
 3. Restore the DB: `docker compose up -d database redis`, then restore the
-   latest dump from `immich-backup/database/` per
+   latest dump per
    [Immich backup and restore](https://docs.immich.app/administration/backup-and-restore/).
 4. `docker compose up -d`.
 
@@ -114,4 +128,10 @@ Practice this once before trusting it.
 - The immich containers hold bind-mount references; remounting the disks
   underneath them is safe, but recreating containers while a disk is missing
   silently re-binds to empty host dirs — check `docker inspect immich_server`
-  mounts after any disk event.
+  mounts after any disk event. (This is why nothing bind-mounts the
+  detachable 2TB drive.)
+- After unplugging the 2TB drive and plugging it back in, the desktop may
+  automount it at `/run/media/teliaz/2TB_TOSHIBA`. The backup script only
+  accepts `/mnt/2TB_TOSHIBA`; remount it with
+  `sudo mount /mnt/2TB_TOSHIBA` (fstab entry) or `sudo umount
+  /run/media/teliaz/2TB_TOSHIBA` first.
