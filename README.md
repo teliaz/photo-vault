@@ -1,5 +1,11 @@
 # Private photo vault plan
 
+> **As-built state:** the system is installed and running. See
+> [`SETUP.md`](SETUP.md) for what actually exists on this machine (Immich on
+> port 2283, library on `/mnt/4T_RED`, nightly backup to `/mnt/2TB_TOSHIBA`).
+> This README remains the design guide; where it differs from SETUP.md, the
+> SETUP file wins.
+
 This guide describes a self-hosted photo service for iOS and Android, with an always-on copy on this computer and a second copy on a removable USB disk. The repository does not install Immich or change this computer's storage. The included script creates a USB backup only when you run it.
 
 ## How the pieces fit

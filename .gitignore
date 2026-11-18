@@ -1,1 +1,3 @@
 backup.env
+immich-app/.env
+immich-app/postgres/

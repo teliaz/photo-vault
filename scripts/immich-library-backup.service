@@ -1,0 +1,8 @@
+[Unit]
+Description=Backup Immich library to 2TB_TOSHIBA
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/immich-library-backup.sh
+Nice=10
+IOSchedulingClass=idle
